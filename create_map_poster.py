@@ -28,6 +28,9 @@ import xml.etree.ElementTree as ET
 from shapely.geometry import LineString, Point as ShapelyPoint
 from pathlib import Path
 
+# KML Points rendering configuration
+RENDER_KML_POINTS = True
+
 class CacheError(Exception):
 	"""Raised when a cache operation fails."""
 	pass
@@ -336,7 +339,29 @@ def render_kml_layer(ax, kml_lines_gdf, kml_points_gdf, G_proj_crs, highlight_co
 			kml_lines_proj.plot(ax=ax, color=highlight_color, linewidth=motorway_width, 
 							   edgecolor='none', zorder=5)
 		
-		# Points are hidden for testing (no black halos, no highlight points)
+		# Render Points with gradient glow effect (if enabled)
+		if RENDER_KML_POINTS and kml_points_gdf is not None and not kml_points_gdf.empty:
+			try:
+				kml_points_proj = kml_points_gdf.to_crs(G_proj_crs)
+			except Exception:
+				kml_points_proj = kml_points_gdf
+			
+			# Base point size (2x smaller than original 20px = 10px)
+			point_size = 10
+			
+			# Create gradient glow effect with multiple layers
+			# Outer glow: large, very transparent
+			kml_points_proj.plot(ax=ax, color=highlight_color, markersize=point_size * 3.5, 
+							  edgecolor='none', zorder=4.6, alpha=0.15)
+			# Mid glow: medium size, medium transparency
+			kml_points_proj.plot(ax=ax, color=highlight_color, markersize=point_size * 2.2, 
+							  edgecolor='none', zorder=4.7, alpha=0.35)
+			# Inner core: small glow layer
+			kml_points_proj.plot(ax=ax, color=highlight_color, markersize=point_size * 1.3, 
+							  edgecolor='none', zorder=4.8, alpha=0.6)
+			# Main point: solid color
+			kml_points_proj.plot(ax=ax, color=highlight_color, markersize=point_size, 
+							  edgecolor='none', zorder=5)
 	except Exception as e:
 		print(f"Warning: Could not render KML layer: {e}")
 
