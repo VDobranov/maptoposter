@@ -21,6 +21,12 @@ from typing import cast
 from geopandas import GeoDataFrame
 import pickle
 from shapely.geometry import Point
+import xml.etree.ElementTree as ET
+from shapely.geometry import LineString, Point as ShapelyPoint
+from pathlib import Path
+import xml.etree.ElementTree as ET
+from shapely.geometry import LineString, Point as ShapelyPoint
+from pathlib import Path
 
 class CacheError(Exception):
 	"""Raised when a cache operation fails."""
@@ -184,6 +190,155 @@ def create_gradient_fade(ax, color, location='bottom', zorder=10):
 	
 	ax.imshow(gradient, extent=[xlim[0], xlim[1], y_bottom, y_top], 
 			  aspect='auto', cmap=custom_cmap, zorder=zorder, origin='lower')
+
+
+def parse_kml_files(input_dir="input") -> tuple:
+	"""Parse all KML files and extract LineString and Point geometries."""
+	input_path = Path(input_dir)
+	if not input_path.exists():
+		return None, None
+	
+	kml_files = list(input_path.glob("*.kml"))
+	if not kml_files:
+		return None, None
+	
+	all_lines = []
+	all_points = []
+	
+	try:
+		for kml_file in kml_files:
+			lines_data, points_data = _extract_geometries_from_kml(kml_file)
+			all_lines.extend(lines_data)
+			all_points.extend(points_data)
+		
+		lines_gdf = points_gdf = None
+		
+		if all_lines:
+			lines_data_dict = [{'geometry': geom, 'name': name} for geom, name in all_lines]
+			lines_gdf = GeoDataFrame(lines_data_dict, crs="EPSG:4326")
+			print(f"✓ Parsed {len(lines_gdf)} LineString geometries")
+		
+		if all_points:
+			points_data_dict = [{'geometry': geom, 'name': name} for geom, name in all_points]
+			points_gdf = GeoDataFrame(points_data_dict, crs="EPSG:4326")
+			print(f"✓ Parsed {len(points_gdf)} Point geometries")
+		
+		return lines_gdf, points_gdf
+	except Exception as e:
+		print(f"✗ Error parsing KML files: {e}")
+		return None, None
+
+
+def _extract_geometries_from_kml(kml_file: Path) -> tuple:
+	"""Extract LineString and Point elements from a KML file."""
+	lines = []
+	points = []
+	
+	try:
+		tree = ET.parse(kml_file)
+		root = tree.getroot()
+		
+		# Find all Placemarks regardless of namespace
+		for placemark in root.iter():
+			tag = placemark.tag.split('}')[-1] if '}' in placemark.tag else placemark.tag
+			if tag == 'Placemark':
+				# Get name
+				name_elem = None
+				for elem in placemark.iter():
+					elem_tag = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+					if elem_tag == 'name' and elem.text:
+						name_elem = elem
+						break
+				name = name_elem.text if name_elem is not None else "Unnamed"
+				
+				# Get LineString
+				for elem in placemark.iter():
+					elem_tag = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+					if elem_tag == 'LineString':
+						coords_elem = None
+						for child in elem:
+							child_tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+							if child_tag == 'coordinates':
+								coords_elem = child
+								break
+						if coords_elem is not None and coords_elem.text:
+							geom = _parse_linestring_coords(coords_elem.text)
+							if geom:
+								lines.append((geom, name))
+						break
+				
+				# Get Point
+				for elem in placemark.iter():
+					elem_tag = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+					if elem_tag == 'Point':
+						coords_elem = None
+						for child in elem:
+							child_tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+							if child_tag == 'coordinates':
+								coords_elem = child
+								break
+						if coords_elem is not None and coords_elem.text:
+							geom = _parse_point_coords(coords_elem.text)
+							if geom:
+								points.append((geom, name))
+						break
+	except Exception as e:
+		pass
+	
+	return lines, points
+
+
+def _parse_linestring_coords(coords_text: str):
+	"""Parse KML LineString coordinates."""
+	try:
+		coords = []
+		for coord_str in coords_text.strip().split():
+			parts = coord_str.split(',')
+			if len(parts) >= 2:
+				coords.append((float(parts[0]), float(parts[1])))
+		return LineString(coords) if len(coords) >= 2 else None
+	except Exception:
+		return None
+
+
+def _parse_point_coords(coords_text: str):
+	"""Parse KML Point coordinates."""
+	try:
+		parts = coords_text.strip().split(',')
+		if len(parts) >= 2:
+			return ShapelyPoint(float(parts[0]), float(parts[1]))
+	except Exception:
+		pass
+	return None
+
+
+def render_kml_layer(ax, kml_lines_gdf, kml_points_gdf, G_proj_crs, highlight_color, motorway_width=1.2):
+	"""Render KML geometries on the map with enhanced visibility."""
+	try:
+		# Render LineStrings with gradient glow effect
+		if kml_lines_gdf is not None and not kml_lines_gdf.empty:
+			try:
+				kml_lines_proj = kml_lines_gdf.to_crs(G_proj_crs)
+			except Exception:
+				kml_lines_proj = kml_lines_gdf
+			
+			# Create gradient glow effect with multiple layers
+			# Outer glow: thick, very transparent
+			kml_lines_proj.plot(ax=ax, color=highlight_color, linewidth=motorway_width * 3.5, 
+							   edgecolor='none', zorder=4.6, alpha=0.15)
+			# Mid glow: medium thickness, medium transparency
+			kml_lines_proj.plot(ax=ax, color=highlight_color, linewidth=motorway_width * 2.2, 
+							   edgecolor='none', zorder=4.7, alpha=0.35)
+			# Inner core: thin glow layer
+			kml_lines_proj.plot(ax=ax, color=highlight_color, linewidth=motorway_width * 1.3, 
+							   edgecolor='none', zorder=4.8, alpha=0.6)
+			# Main line: solid color
+			kml_lines_proj.plot(ax=ax, color=highlight_color, linewidth=motorway_width, 
+							   edgecolor='none', zorder=5)
+		
+		# Points are hidden for testing (no black halos, no highlight points)
+	except Exception as e:
+		print(f"Warning: Could not render KML layer: {e}")
 
 def get_edge_colors_by_type(G):
 	"""
@@ -382,7 +537,7 @@ def create_poster(city, country, point, dist, output_file, output_format, width=
 	print(f"\nGenerating map for {city}, {country}...")
 	
 	# Progress bar for data fetching
-	with tqdm(total=3, desc="Fetching map data", unit="step", bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}') as pbar:
+	with tqdm(total=4, desc="Fetching map data", unit="step", bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}') as pbar:
 		# 1. Fetch Street Network
 		pbar.set_description("Downloading street network")
 		compensated_dist = dist * (max(height, width) / min(height, width))/4 # To compensate for viewport crop
@@ -400,6 +555,16 @@ def create_poster(city, country, point, dist, output_file, output_format, width=
 		pbar.set_description("Downloading parks/green spaces")
 		parks = fetch_features(point, compensated_dist, tags={'leisure': 'park', 'natural': 'wood', 'landuse': 'grass'}, name='parks')
 		pbar.update(1)
+		
+		# 4. Parse KML files
+		pbar.set_description("Parsing KML files")
+		kml_lines, kml_points = parse_kml_files(input_dir="input")
+		pbar.update(1)
+		
+		# # 4. Parse KML files
+		# pbar.set_description("Parsing KML files")
+		# kml_lines, kml_points = parse_kml_files(input_dir="input")
+		# pbar.update(1)
 	
 	print("✓ All data retrieved successfully!")
 	
@@ -454,6 +619,13 @@ def create_poster(city, country, point, dist, output_file, output_format, width=
 	ax.set_aspect('equal', adjustable='box')
 	ax.set_xlim(crop_xlim)
 	ax.set_ylim(crop_ylim)
+	
+	# Layer 2.5: KML overlay
+	if kml_lines is not None or kml_points is not None:
+		print("Rendering KML layer...")
+		highlight_color = THEME.get('highlight', '#FF0000')
+		motorway_width = get_edge_widths_by_type(G_proj)[0] if G_proj.number_of_edges() > 0 else 1.2
+		render_kml_layer(ax, kml_lines, kml_points, G_proj.graph['crs'], highlight_color, motorway_width)
 	
 	# Layer 3: Gradients (Top and Bottom)
 	create_gradient_fade(ax, THEME['gradient_color'], location='bottom', zorder=10)
