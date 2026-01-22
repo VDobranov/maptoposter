@@ -1,0 +1,16 @@
+{
+  "name": "Индорпроект",
+  "description": "Для Индорпроекта",
+  "bg": "#004843",
+  "text": "#CFFFFF",
+  "gradient_color": "#004843",
+  "water": "#4a857f",
+  "parks": "#5f9b95",
+  "road_motorway": "#CFFFFF",
+  "road_primary": "#b9f7f0",
+  "road_secondary": "#a2e0d8",
+  "road_tertiary": "#8bc8c1",
+  "road_residential": "#75b1ab",
+  "road_default": "#8bc8c1",
+  "highlight": "#FFFFFF"
+}
