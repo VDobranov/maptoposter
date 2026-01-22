@@ -4,7 +4,10 @@ env/
 .venv/
 .DS_Store
 
+input/
 coords*
+copilot*
 graph*
 parks*
 water*
+*_indorp_*

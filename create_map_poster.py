@@ -398,7 +398,7 @@ def create_poster(city, country, point, dist, output_file, output_format, width=
 		
 		# 3. Fetch Parks
 		pbar.set_description("Downloading parks/green spaces")
-		parks = fetch_features(point, compensated_dist, tags={'leisure': 'park', 'landuse': 'grass'}, name='parks')
+		parks = fetch_features(point, compensated_dist, tags={'leisure': 'park', 'natural': 'wood', 'landuse': 'grass'}, name='parks')
 		pbar.update(1)
 	
 	print("✓ All data retrieved successfully!")
@@ -523,14 +523,14 @@ def create_poster(city, country, point, dist, output_file, output_format, width=
 			color=THEME['text'], linewidth=1 * scale_factor, zorder=11)
 
 	# --- ATTRIBUTION (bottom right) ---
-	if FONTS:
-		font_attr = FontProperties(fname=FONTS['light'], size=8)
-	else:
-		font_attr = FontProperties(family='monospace', size=8)
+	# if FONTS:
+	# 	font_attr = FontProperties(fname=FONTS['light'], size=8)
+	# else:
+	# 	font_attr = FontProperties(family='monospace', size=8)
 	
-	ax.text(0.98, 0.02, "© OpenStreetMap contributors", transform=ax.transAxes,
-			color=THEME['text'], alpha=0.5, ha='right', va='bottom', 
-			fontproperties=font_attr, zorder=11)
+	# ax.text(0.98, 0.02, "© OpenStreetMap contributors", transform=ax.transAxes,
+	# 		color=THEME['text'], alpha=0.5, ha='right', va='bottom', 
+	# 		fontproperties=font_attr, zorder=11)
 
 	# 5. Save
 	print(f"Saving to {output_file}...")
@@ -540,7 +540,8 @@ def create_poster(city, country, point, dist, output_file, output_format, width=
 
 	# DPI matters mainly for raster formats
 	if fmt == "png":
-		save_kwargs["dpi"] = 300
+		# save_kwargs["dpi"] = 300
+		save_kwargs["dpi"] = 150
 
 	plt.savefig(output_file, format=fmt, **save_kwargs)
 
