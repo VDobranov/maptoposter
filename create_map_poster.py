@@ -21,6 +21,7 @@ from typing import cast
 from geopandas import GeoDataFrame
 import pickle
 from shapely.geometry import Point
+from lat_lon_parser import parse
 import xml.etree.ElementTree as ET
 from shapely.geometry import LineString, Point as ShapelyPoint
 from pathlib import Path
@@ -201,7 +202,7 @@ def parse_kml_files(input_dir="input") -> tuple:
 	if not input_path.exists():
 		return None, None
 	
-	kml_files = list(input_path.glob("*.kml"))
+	kml_files = list(input_path.glob("doc.kml"))
 	if not kml_files:
 		return None, None
 	
@@ -327,14 +328,14 @@ def render_kml_layer(ax, kml_lines_gdf, kml_points_gdf, G_proj_crs, highlight_co
 			
 			# Create gradient glow effect with multiple layers
 			# Outer glow: thick, very transparent
-			kml_lines_proj.plot(ax=ax, color=highlight_color, linewidth=motorway_width * 3.5, 
+			kml_lines_proj.plot(ax=ax, color=highlight_color, linewidth=motorway_width * 2, 
 							   edgecolor='none', zorder=4.6, alpha=0.15)
-			# Mid glow: medium thickness, medium transparency
-			kml_lines_proj.plot(ax=ax, color=highlight_color, linewidth=motorway_width * 2.2, 
-							   edgecolor='none', zorder=4.7, alpha=0.35)
-			# Inner core: thin glow layer
-			kml_lines_proj.plot(ax=ax, color=highlight_color, linewidth=motorway_width * 1.3, 
-							   edgecolor='none', zorder=4.8, alpha=0.6)
+			# # Mid glow: medium thickness, medium transparency
+			# kml_lines_proj.plot(ax=ax, color=highlight_color, linewidth=motorway_width * 2.2, 
+			# 				   edgecolor='none', zorder=4.7, alpha=0.35)
+			# # Inner core: thin glow layer
+			# kml_lines_proj.plot(ax=ax, color=highlight_color, linewidth=motorway_width * 1.3, 
+			# 				   edgecolor='none', zorder=4.8, alpha=0.6)
 			# Main line: solid color
 			kml_lines_proj.plot(ax=ax, color=highlight_color, linewidth=motorway_width, 
 							   edgecolor='none', zorder=5)
@@ -351,14 +352,14 @@ def render_kml_layer(ax, kml_lines_gdf, kml_points_gdf, G_proj_crs, highlight_co
 			
 			# Create gradient glow effect with multiple layers
 			# Outer glow: large, very transparent
-			kml_points_proj.plot(ax=ax, color=highlight_color, markersize=point_size * 3.5, 
+			kml_points_proj.plot(ax=ax, color=highlight_color, markersize=point_size * 2, 
 							  edgecolor='none', zorder=4.6, alpha=0.15)
 			# Mid glow: medium size, medium transparency
-			kml_points_proj.plot(ax=ax, color=highlight_color, markersize=point_size * 2.2, 
-							  edgecolor='none', zorder=4.7, alpha=0.35)
-			# Inner core: small glow layer
-			kml_points_proj.plot(ax=ax, color=highlight_color, markersize=point_size * 1.3, 
-							  edgecolor='none', zorder=4.8, alpha=0.6)
+			# kml_points_proj.plot(ax=ax, color=highlight_color, markersize=point_size * 2.2, 
+			# 				  edgecolor='none', zorder=4.7, alpha=0.35)
+			# # Inner core: small glow layer
+			# kml_points_proj.plot(ax=ax, color=highlight_color, markersize=point_size * 1.3, 
+			# 				  edgecolor='none', zorder=4.8, alpha=0.6)
 			# Main point: solid color
 			kml_points_proj.plot(ax=ax, color=highlight_color, markersize=point_size, 
 							  edgecolor='none', zorder=5)
@@ -845,6 +846,8 @@ Examples:
 	parser.add_argument('--city', '-c', type=str, help='City name')
 	parser.add_argument('--country', '-C', type=str, help='Country name')
 	parser.add_argument('--country-label', dest='country_label', type=str, help='Override country text displayed on poster')
+	parser.add_argument('--latitude', '-lat', dest='latitude', type=str, help='Override latitude center point')
+	parser.add_argument('--longitude', '-long', dest='longitude', type=str, help='Override longitude center point')
 	parser.add_argument('--theme', '-t', type=str, default='feature_based', help='Theme name (default: feature_based)')
 	parser.add_argument('--all-themes', '--All-themes', dest='all_themes', action='store_true', help='Generate posters for all themes')
 	parser.add_argument('--distance', '-d', type=int, default=29000, help='Map radius in meters (default: 29000)')
@@ -891,7 +894,13 @@ Examples:
 	
 	# Get coordinates and generate poster
 	try:
-		coords = get_coordinates(args.city, args.country)
+		if args.latitude and args.longitude:
+			lat = parse(args.latitude)
+			lon = parse(args.longitude)
+			coords = [lat, lon]
+			print(f"✓ Coordinates: {', '.join([str(i) for i in coords])}")
+		else:
+			coords = get_coordinates(args.city, args.country)
 		for theme_name in themes_to_generate:
 			THEME = load_theme(theme_name)
 			output_file = generate_output_filename(args.city, theme_name, args.format)
