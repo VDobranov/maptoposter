@@ -15,19 +15,17 @@ from datetime import datetime
 import argparse
 import pickle
 import asyncio
-from pathlib import Path
 from hashlib import md5
 from typing import cast
 from geopandas import GeoDataFrame
 import pickle
-from shapely.geometry import Point
 from lat_lon_parser import parse
 import xml.etree.ElementTree as ET
-from shapely.geometry import LineString, Point as ShapelyPoint
+from shapely.geometry import LineString, Point
 from pathlib import Path
-import xml.etree.ElementTree as ET
-from shapely.geometry import LineString, Point as ShapelyPoint
-from pathlib import Path
+# from io import StringIO
+from matplotlib.patches import Polygon
+# import xml.etree.ElementTree as ET_svg
 
 # KML Points rendering configuration
 RENDER_KML_POINTS = True
@@ -46,6 +44,166 @@ FONTS_DIR = "fonts"
 POSTERS_DIR = "posters"
 
 CACHE_DIR = ".cache"
+
+# Logo SVG embedded
+LOGO_SVG = """<svg width="313" height="263" viewBox="0 0 313 263" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M0 0H114V263H78.5V35H36V263H0Z" fill="#CFFFFF"/>
+<path d="M199 0H313V263H277.5V35H235V263H199Z" fill="#CFFFFF"/>
+<path d="M199.5 44V89.5L36 223V176.5Z" fill="#CFFFFF"/>
+<path d="M277.5 43V88.5L114 222V175.5Z" fill="#CFFFFF"/>
+</svg>"""
+def render_logo_svg(ax, logo_svg_str, color, position_x=0.5, position_y=0.85, size_scale=1.0, width=12):
+	"""
+	Render SVG logo on matplotlib axes.
+	
+	Args:
+		ax: matplotlib axes object
+		logo_svg_str: SVG string content
+		color: color to apply to logo elements (hex or named color)
+		position_x: horizontal position (0-1, center at 0.5)
+		position_y: vertical position (0-1, top at 1.0)
+		size_scale: size scaling factor (default 1.0 = city name font size)
+		width: figure width in inches (for scaling)
+	"""
+	try:
+		
+		# Scale base on width (city name font = 60pt at 12 inches)
+		base_size = 60 * (width / 12.0) * size_scale
+		
+		# Parse SVG
+		root = ET.fromstring(logo_svg_str)
+		
+		# Extract viewBox dimensions
+		viewBox = root.get('viewBox', '0 0 313 263')
+		viewBox_parts = viewBox.split()
+		svg_width = float(viewBox_parts[2])
+		svg_height = float(viewBox_parts[3])
+		aspect_ratio = svg_width / svg_height
+
+		norm_width = svg_width / width
+
+		# Convert color to RGB
+		from matplotlib.colors import to_rgb
+		rgb_color = to_rgb(color)
+		
+		# Process each path element
+		for path_elem in root.findall('.//{http://www.w3.org/2000/svg}path'):
+			path_data = path_elem.get('d', '')
+			if path_data:
+				# Parse path and convert to matplotlib polygon
+				points = _parse_svg_path(path_data, svg_width, svg_height)
+				if points:
+					# Transform to axes coordinates
+					# Center around position_x, position_y
+					points_array = np.array(points)
+					# print(points_array)
+					
+					# Normalize to center at origin
+					# center_x = np.mean(points_array[:, 0])
+					# center_x = (max(points_array[:,0]) - min(points_array[:,0])) / 2
+					# center_y = np.mean(points_array[:, 1])
+					# points_array[:, 0] -= center_x
+					# points_array[:, 1] -= center_y
+
+					print(points_array)
+					
+					# Scale to size
+					scale = base_size
+					points_array *= scale
+					
+					# Apply aspect ratio correction
+					points_array[:, 0] *= aspect_ratio
+					
+					# Transform to figure coordinates
+					points_array[:, 0] = position_x + points_array[:, 0] / (width * 100)
+					points_array[:, 1] = position_y + points_array[:, 1] / (16 * 100)  # Assuming height=16
+
+					# print(points_array)
+					
+					# Create and add polygon
+					polygon = Polygon(points_array, closed=True, 
+									facecolor=rgb_color, edgecolor='none', 
+									zorder=11, transform=ax.transAxes)
+					ax.add_patch(polygon)
+
+	except Exception as e:
+		print(f"Warning: Could not render logo: {e}")
+
+
+def _parse_svg_path(path_data, svg_width, svg_height):
+	"""
+	Parse SVG path with M, L, H, V, Z commands (absolute only).
+	Returns list of (x, y) points in normalized [0,1] coordinates.
+	"""
+	import re
+
+	# Remove extra whitespace and split into tokens (commands + numbers)
+	tokens = re.findall(r'[MmLlHhVvZz]|-?\d+\.?\d*', path_data)
+	if not tokens:
+		return None
+
+	points = []
+	current_x, current_y = 0.0, 0.0
+	start_x, start_y = 0.0, 0.0
+	index = 0
+	last_command = None
+
+	def normalize(x, y):
+		return (x - svg_width/2) / svg_width, 1 - (y - svg_height/2) / svg_height
+
+	while index < len(tokens):
+		token = tokens[index]
+		index += 1
+
+		if token in 'MmLlHhVvZz':
+			last_command = token
+			is_upper = token.isupper()
+			# Get absolute coordinates (uppercase) or relative (lowercase)
+			if token in 'Mm' and index < len(tokens):
+				x = float(tokens[index]); index += 1
+				if index < len(tokens) and re.match(r'-?\d+\.?\d*', tokens[index]):
+					y = float(tokens[index]); index += 1
+				else:
+					y = current_y  # fallback
+				if not is_upper:
+					x += current_x
+					y += current_y
+				points.append((x, y))
+				current_x, current_y = x, y
+				start_x, start_y = x, y
+			elif token in 'Ll' and index < len(tokens):
+				x = float(tokens[index]); index += 1
+				if index < len(tokens) and re.match(r'-?\d+\.?\d*', tokens[index]):
+					y = float(tokens[index]); index += 1
+				else:
+					y = current_y
+				if not is_upper:
+					x += current_x
+					y += current_y
+				points.append((x, y))
+				current_x, current_y = x, y
+			elif token in 'Hh' and index < len(tokens):
+				x = float(tokens[index]); index += 1
+				if not is_upper:
+					x += current_x
+				points.append((x, current_y))
+				current_x = x
+			elif token in 'Vv' and index < len(tokens):
+				y = float(tokens[index]); index += 1
+				if not is_upper:
+					y += current_y
+				points.append((current_x, y))
+				current_y = y
+			elif token in 'Zz':
+				points.append((start_x, start_y))
+				current_x, current_y = start_x, start_y
+		else:
+			# Should not happen if parsing correct
+			continue
+	# Convert to normalized coordinates
+	normalized_points = [normalize(x, y) for x, y in points]
+	return normalized_points if len(normalized_points) >= 2 else None
+
 
 # class CacheError(Exception):
 #     pass
@@ -310,7 +468,7 @@ def _parse_point_coords(coords_text: str):
 	try:
 		parts = coords_text.strip().split(',')
 		if len(parts) >= 2:
-			return ShapelyPoint(float(parts[0]), float(parts[1]))
+			return Point(float(parts[0]), float(parts[1]))
 	except Exception:
 		pass
 	return None
@@ -702,6 +860,8 @@ def create_poster(city, country, point, dist, output_file, output_format, width=
 		font_main_adjusted = FontProperties(family='monospace', weight='bold', size=adjusted_font_size)
 
 	# --- BOTTOM TEXT ---
+	# Render logo
+	render_logo_svg(ax, LOGO_SVG, THEME['text'], position_x=0.5, position_y=0.85, size_scale=1.0, width=width)
 	ax.text(0.5, 0.14, spaced_city, transform=ax.transAxes,
 			color=THEME['text'], ha='center', fontproperties=font_main_adjusted, zorder=11)
 	
