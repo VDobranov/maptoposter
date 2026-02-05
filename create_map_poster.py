@@ -52,7 +52,7 @@ LOGO_SVG = """<svg width="313" height="263" viewBox="0 0 313 263" fill="none" xm
 <path d="M199.5 44V89.5L36 223V176.5Z" fill="#CFFFFF"/>
 <path d="M277.5 43V88.5L114 222V175.5Z" fill="#CFFFFF"/>
 </svg>"""
-def render_logo_svg(ax, logo_svg_str, color, position_x=0.5, position_y=0.85, size_scale=1.0, width=12):
+def render_logo_svg(ax, logo_svg_str, color, position_x=0.5, position_y=0.85, size_scale=1.0, width=12, height=16):
 	"""
 	Render SVG logo on matplotlib axes.
 	
@@ -116,7 +116,7 @@ def render_logo_svg(ax, logo_svg_str, color, position_x=0.5, position_y=0.85, si
 					
 					# Transform to figure coordinates
 					points_array[:, 0] = position_x + points_array[:, 0] / (width * 100)
-					points_array[:, 1] = position_y + points_array[:, 1] / (16 * 100)  # Assuming height=16
+					points_array[:, 1] = position_y + points_array[:, 1] / (height * 100)  # Assuming height=16
 
 					# print(points_array)
 					
@@ -861,12 +861,12 @@ def create_poster(city, country, point, dist, output_file, output_format, width=
 
 	# --- BOTTOM TEXT ---
 	# Render logo
-	render_logo_svg(ax, LOGO_SVG, THEME['text'], position_x=0.5, position_y=0.85, size_scale=1.0, width=width)
-	ax.text(0.5, 0.14, spaced_city, transform=ax.transAxes,
+	render_logo_svg(ax, LOGO_SVG, THEME['text'], position_x=0.5, position_y=0.05, size_scale=1.0, width=width, height=height)
+	ax.text(0.5, 0.18, spaced_city, transform=ax.transAxes,
 			color=THEME['text'], ha='center', fontproperties=font_main_adjusted, zorder=11)
 	
 	country_text = country_label if country_label is not None else country
-	ax.text(0.5, 0.10, country_text.upper(), transform=ax.transAxes,
+	ax.text(0.5, 0.14, country_text.upper(), transform=ax.transAxes,
 			color=THEME['text'], ha='center', fontproperties=font_sub, zorder=11)
 	
 	lat, lon = point
@@ -874,10 +874,10 @@ def create_poster(city, country, point, dist, output_file, output_format, width=
 	if lon < 0:
 		coords = coords.replace("E", "W")
 	
-	ax.text(0.5, 0.07, coords, transform=ax.transAxes,
-			color=THEME['text'], alpha=0.7, ha='center', fontproperties=font_coords, zorder=11)
+	# ax.text(0.5, 0.07, coords, transform=ax.transAxes,
+	# 		color=THEME['text'], alpha=0.7, ha='center', fontproperties=font_coords, zorder=11)
 	
-	ax.plot([0.4, 0.6], [0.125, 0.125], transform=ax.transAxes, 
+	ax.plot([0.4, 0.6], [0.165, 0.165], transform=ax.transAxes, 
 			color=THEME['text'], linewidth=1 * scale_factor, zorder=11)
 
 	# --- ATTRIBUTION (bottom right) ---
@@ -898,8 +898,8 @@ def create_poster(city, country, point, dist, output_file, output_format, width=
 
 	# DPI matters mainly for raster formats
 	if fmt == "png":
-		# save_kwargs["dpi"] = 300
-		save_kwargs["dpi"] = 150
+		save_kwargs["dpi"] = 300
+		# save_kwargs["dpi"] = 150
 
 	plt.savefig(output_file, format=fmt, **save_kwargs)
 
